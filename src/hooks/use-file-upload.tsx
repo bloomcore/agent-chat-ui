@@ -3,12 +3,25 @@ import { toast } from "sonner";
 import type { Base64ContentBlock } from "@langchain/core/messages";
 import { fileToContentBlock } from "@/lib/multimodal-utils";
 
+// Updated MIME types for CAD files - includes common detection types
 export const SUPPORTED_FILE_TYPES = [
   "image/jpeg",
   "image/png",
-  "image/gif",
+  "image/gif", 
   "image/webp",
   "application/pdf",
+  // DWG file MIME types (browsers may detect differently)
+  "application/acad",
+  "image/vnd.dwg",
+  "application/dwg",
+  "image/x-dwg",
+  "application/x-dwg",
+  "image/x-autocad",
+  "application/octet-stream", // Very common for DWG files
+  // DXF file MIME types
+  "application/dxf",
+  "image/vnd.dxf",
+  "text/plain", // DXF files are sometimes detected as plain text
 ];
 
 interface UseFileUploadOptions {
@@ -24,6 +37,46 @@ export function useFileUpload({
   const [dragOver, setDragOver] = useState(false);
   const dragCounter = useRef(0);
 
+  // Enhanced function to check if a file is a CAD file based on extension
+  const isCADFile = (file: File): boolean => {
+    const fileName = file.name.toLowerCase();
+    const extension = fileName.split('.').pop();
+    return extension === 'dwg' || extension === 'dxf';
+  };
+
+  // Enhanced file validation - prioritizes extension for CAD files
+  const isValidFile = (file: File): boolean => {
+    console.log('Validating file:', {
+      name: file.name,
+      type: file.type || 'no MIME type',
+      extension: file.name.split('.').pop()?.toLowerCase()
+    });
+
+    // First check if it's a CAD file by extension (most reliable)
+    if (isCADFile(file)) {
+      console.log(' Valid CAD file detected by extension');
+      return true;
+    }
+
+    // Then check MIME type for other files
+    if (SUPPORTED_FILE_TYPES.includes(file.type)) {
+      console.log(' Valid file detected by MIME type');
+      return true;
+    }
+
+    // Special case: application/octet-stream might be a CAD file
+    if (file.type === "application/octet-stream") {
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (extension === 'dwg' || extension === 'dxf') {
+        console.log(' Valid CAD file detected as octet-stream');
+        return true;
+      }
+    }
+
+    console.log(' File validation failed');
+    return false;
+  };
+
   const isDuplicate = (file: File, blocks: Base64ContentBlock[]) => {
     if (file.type === "application/pdf") {
       return blocks.some(
@@ -33,12 +86,22 @@ export function useFileUpload({
           b.metadata?.filename === file.name,
       );
     }
-    if (SUPPORTED_FILE_TYPES.includes(file.type)) {
+    
+    // For CAD files, check by filename since MIME types vary
+    if (isCADFile(file)) {
       return blocks.some(
         (b) =>
-          b.type === "image" &&
-          b.metadata?.name === file.name &&
-          b.mime_type === file.type,
+          b.type === "file" &&
+          b.metadata?.filename === file.name
+      );
+    }
+    
+    // Check for other supported types
+    if (isValidFile(file)) {
+      return blocks.some(
+        (b) =>
+          ((b.type === "image" && b.metadata?.name === file.name) ||
+           (b.type === "file" && b.metadata?.filename === file.name))
       );
     }
     return false;
@@ -48,12 +111,19 @@ export function useFileUpload({
     const files = e.target.files;
     if (!files) return;
     const fileArray = Array.from(files);
-    const validFiles = fileArray.filter((file) =>
-      SUPPORTED_FILE_TYPES.includes(file.type),
-    );
-    const invalidFiles = fileArray.filter(
-      (file) => !SUPPORTED_FILE_TYPES.includes(file.type),
-    );
+    
+    console.log('Files selected:', fileArray.map(f => ({
+      name: f.name,
+      type: f.type || 'no MIME type',
+      size: f.size
+    })));
+    
+    const validFiles = fileArray.filter(isValidFile);
+    const invalidFiles = fileArray.filter((file) => !isValidFile(file));
+    
+    console.log('Valid files:', validFiles.length);
+    console.log('Invalid files:', invalidFiles.length);
+    
     const duplicateFiles = validFiles.filter((file) =>
       isDuplicate(file, contentBlocks),
     );
@@ -62,8 +132,14 @@ export function useFileUpload({
     );
 
     if (invalidFiles.length > 0) {
+      console.log('Invalid files details:', invalidFiles.map(f => ({
+        name: f.name,
+        type: f.type,
+        extension: f.name.split('.').pop()
+      })));
+      
       toast.error(
-        "You have uploaded invalid file type. Please upload a JPEG, PNG, GIF, WEBP image or a PDF.",
+        `Invalid file type(s): ${invalidFiles.map(f => f.name).join(', ')}. Please upload JPEG, PNG, GIF, WEBP images, PDF, DWG or DXF files.`,
       );
     }
     if (duplicateFiles.length > 0) {
@@ -72,14 +148,22 @@ export function useFileUpload({
       );
     }
 
-    const newBlocks = uniqueFiles.length
-      ? await Promise.all(uniqueFiles.map(fileToContentBlock))
-      : [];
-    setContentBlocks((prev) => [...prev, ...newBlocks]);
+    if (uniqueFiles.length > 0) {
+      console.log('Processing unique files:', uniqueFiles.map(f => f.name));
+      try {
+        const newBlocks = await Promise.all(uniqueFiles.map(fileToContentBlock));
+        setContentBlocks((prev) => [...prev, ...newBlocks]);
+        console.log('Successfully processed files');
+      } catch (error) {
+        console.error('Error processing files:', error);
+        toast.error('Error processing files. Please try again.');
+      }
+    }
+    
     e.target.value = "";
   };
 
-  // Drag and drop handlers
+  // Drag and drop handlers with enhanced validation
   useEffect(() => {
     if (!dropRef.current) return;
 
@@ -108,12 +192,9 @@ export function useFileUpload({
       if (!e.dataTransfer) return;
 
       const files = Array.from(e.dataTransfer.files);
-      const validFiles = files.filter((file) =>
-        SUPPORTED_FILE_TYPES.includes(file.type),
-      );
-      const invalidFiles = files.filter(
-        (file) => !SUPPORTED_FILE_TYPES.includes(file.type),
-      );
+      const validFiles = files.filter(isValidFile);
+      const invalidFiles = files.filter((file) => !isValidFile(file));
+      
       const duplicateFiles = validFiles.filter((file) =>
         isDuplicate(file, contentBlocks),
       );
@@ -123,7 +204,7 @@ export function useFileUpload({
 
       if (invalidFiles.length > 0) {
         toast.error(
-          "You have uploaded invalid file type. Please upload a JPEG, PNG, GIF, WEBP image or a PDF.",
+          `Invalid file type(s): ${invalidFiles.map(f => f.name).join(', ')}. Please upload JPEG, PNG, GIF, WEBP images, PDF, DWG or DXF files.`,
         );
       }
       if (duplicateFiles.length > 0) {
@@ -132,10 +213,15 @@ export function useFileUpload({
         );
       }
 
-      const newBlocks = uniqueFiles.length
-        ? await Promise.all(uniqueFiles.map(fileToContentBlock))
-        : [];
-      setContentBlocks((prev) => [...prev, ...newBlocks]);
+      if (uniqueFiles.length > 0) {
+        try {
+          const newBlocks = await Promise.all(uniqueFiles.map(fileToContentBlock));
+          setContentBlocks((prev) => [...prev, ...newBlocks]);
+        } catch (error) {
+          console.error('Error processing dropped files:', error);
+          toast.error('Error processing dropped files. Please try again.');
+        }
+      }
     };
     const handleWindowDragEnd = (e: DragEvent) => {
       dragCounter.current = 0;
@@ -194,7 +280,7 @@ export function useFileUpload({
   const resetBlocks = () => setContentBlocks([]);
 
   /**
-   * Handle paste event for files (images, PDFs)
+   * Handle paste event for files (images, PDFs, CAD files)
    * Can be used as onPaste={handlePaste} on a textarea or input
    */
   const handlePaste = async (
@@ -214,13 +300,11 @@ export function useFileUpload({
       return;
     }
     e.preventDefault();
-    const validFiles = files.filter((file) =>
-      SUPPORTED_FILE_TYPES.includes(file.type),
-    );
-    const invalidFiles = files.filter(
-      (file) => !SUPPORTED_FILE_TYPES.includes(file.type),
-    );
-    const isDuplicate = (file: File) => {
+    
+    const validFiles = files.filter(isValidFile);
+    const invalidFiles = files.filter((file) => !isValidFile(file));
+    
+    const isDuplicatePaste = (file: File) => {
       if (file.type === "application/pdf") {
         return contentBlocks.some(
           (b) =>
@@ -229,21 +313,22 @@ export function useFileUpload({
             b.metadata?.filename === file.name,
         );
       }
-      if (SUPPORTED_FILE_TYPES.includes(file.type)) {
+      if (isValidFile(file)) {
         return contentBlocks.some(
           (b) =>
-            b.type === "image" &&
-            b.metadata?.name === file.name &&
-            b.mime_type === file.type,
+            ((b.type === "image" && b.metadata?.name === file.name) ||
+             (b.type === "file" && b.metadata?.filename === file.name))
         );
       }
       return false;
     };
-    const duplicateFiles = validFiles.filter(isDuplicate);
-    const uniqueFiles = validFiles.filter((file) => !isDuplicate(file));
+    
+    const duplicateFiles = validFiles.filter(isDuplicatePaste);
+    const uniqueFiles = validFiles.filter((file) => !isDuplicatePaste(file));
+    
     if (invalidFiles.length > 0) {
       toast.error(
-        "You have pasted an invalid file type. Please paste a JPEG, PNG, GIF, WEBP image or a PDF.",
+        `Invalid pasted file type(s): ${invalidFiles.map(f => f.name).join(', ')}. Please paste JPEG, PNG, GIF, WEBP images, PDF, DWG or DXF files.`,
       );
     }
     if (duplicateFiles.length > 0) {
@@ -252,8 +337,13 @@ export function useFileUpload({
       );
     }
     if (uniqueFiles.length > 0) {
-      const newBlocks = await Promise.all(uniqueFiles.map(fileToContentBlock));
-      setContentBlocks((prev) => [...prev, ...newBlocks]);
+      try {
+        const newBlocks = await Promise.all(uniqueFiles.map(fileToContentBlock));
+        setContentBlocks((prev) => [...prev, ...newBlocks]);
+      } catch (error) {
+        console.error('Error processing pasted files:', error);
+        toast.error('Error processing pasted files. Please try again.');
+      }
     }
   };
 
@@ -268,3 +358,4 @@ export function useFileUpload({
     handlePaste,
   };
 }
+

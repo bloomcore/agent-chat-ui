@@ -3,6 +3,7 @@ import { File, Image as ImageIcon, X as XIcon } from "lucide-react";
 import type { Base64ContentBlock } from "@langchain/core/messages";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
+
 export interface MultimodalPreviewProps {
   block: Base64ContentBlock;
   removable?: boolean;
@@ -18,6 +19,12 @@ export const MultimodalPreview: React.FC<MultimodalPreviewProps> = ({
   className,
   size = "md",
 }) => {
+  // Helper function to check if a file is a CAD file
+  const isCADFile = (filename: string): boolean => {
+    const extension = filename.toLowerCase().split('.').pop();
+    return extension === 'dwg' || extension === 'dxf';
+  };
+
   // Image block
   if (
     block.type === "image" &&
@@ -95,6 +102,56 @@ export const MultimodalPreview: React.FC<MultimodalPreviewProps> = ({
     );
   }
 
+  // CAD files (DWG/DXF) block
+  if (
+    block.type === "file" &&
+    block.source_type === "base64" &&
+    block.metadata?.filename &&
+    isCADFile(block.metadata.filename)
+  ) {
+    const filename = block.metadata.filename;
+    const fileExtension = filename.toLowerCase().split('.').pop()?.toUpperCase();
+    
+    return (
+      <div
+        className={cn(
+          "relative flex items-start gap-2 rounded-md border bg-blue-50 px-3 py-2",
+          className,
+        )}
+      >
+        <div className="flex flex-shrink-0 flex-col items-start justify-start">
+          <File
+            className={cn(
+              "text-blue-700",
+              size === "sm" ? "h-5 w-5" : "h-7 w-7",
+            )}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <span
+            className={cn("text-sm break-all text-gray-800")}
+            style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}
+          >
+            {String(filename)}
+          </span>
+          <div className="text-xs text-blue-600 mt-1">
+            {fileExtension} CAD File
+          </div>
+        </div>
+        {removable && (
+          <button
+            type="button"
+            className="ml-2 self-start rounded-full bg-blue-200 p-1 text-blue-700 hover:bg-blue-300"
+            onClick={onRemove}
+            aria-label="Remove CAD file"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
   // Fallback for unknown types
   return (
     <div
@@ -118,3 +175,4 @@ export const MultimodalPreview: React.FC<MultimodalPreviewProps> = ({
     </div>
   );
 };
+
