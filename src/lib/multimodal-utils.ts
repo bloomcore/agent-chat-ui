@@ -1,10 +1,29 @@
 import type { Base64ContentBlock } from "@langchain/core/messages";
 import { toast } from "sonner";
+import { uploadFileToS3 } from "./s3-upload";
+
+// Extended content block type that supports S3 references
+export interface S3ContentBlock {
+  type: "file";
+  source_type: "s3";
+  s3_key: string;
+  s3_bucket: string;
+  s3_region: string;
+  metadata: {
+    filename: string;
+    original_name: string;
+    size: number;
+    mime_type: string;
+    uploaded_at: string;
+  };
+}
+
+export type ContentBlock = Base64ContentBlock | S3ContentBlock;
 
 // Returns a Promise of a typed multimodal block for images, PDFs, or CAD files
 export async function fileToContentBlock(
   file: File,
-): Promise<Base64ContentBlock> {
+): Promise<ContentBlock> {
   const supportedImageTypes = [
     "image/jpeg",
     "image/png",
@@ -71,27 +90,26 @@ export async function fileToContentBlock(
     };
   }
 
-  // Handle CAD files (DWG and DXF)
+  // Handle CAD files (DWG and DXF) - Upload to S3 instead of base64
   if (supportedCADTypes.includes(file.type) || isCADFile(file)) {
-    // Determine the correct MIME type for CAD files
-    let mimeType = file.type;
-    if (!mimeType || mimeType === "text/plain") {
-      // Fallback based on file extension
-      const fileName = file.name.toLowerCase();
-      if (fileName.endsWith('.dwg')) {
-        mimeType = 'application/acad';
-      } else if (fileName.endsWith('.dxf')) {
-        mimeType = 'application/dxf';
-      }
+    try {
+      toast.info(`Uploading ${file.name} to cloud storage...`);
+      const s3Result = await uploadFileToS3(file);
+      toast.success(`${file.name} uploaded successfully!`);
+      
+      return {
+        type: "file",
+        source_type: "s3",
+        s3_key: s3Result.s3_key,
+        s3_bucket: s3Result.s3_bucket,
+        s3_region: s3Result.s3_region,
+        metadata: s3Result.metadata,
+      };
+    } catch (error) {
+      console.error("S3 upload failed:", error);
+      toast.error(`Failed to upload ${file.name}. Please try again.`);
+      return Promise.reject(error);
     }
-
-    return {
-      type: "file",
-      source_type: "base64",
-      mime_type: mimeType,
-      data,
-      metadata: { filename: file.name },
-    };
   }
 
   // This shouldn't happen given our validation above, but just in case
@@ -113,14 +131,26 @@ export async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-// Type guard for Base64ContentBlock
-export function isBase64ContentBlock(
+// Type guard for ContentBlock (both Base64 and S3)
+export function isContentBlock(
   block: unknown,
-): block is Base64ContentBlock {
+): block is ContentBlock {
   if (typeof block !== "object" || block === null || !("type" in block))
     return false;
   
-  // file type (legacy + CAD files)
+  // S3 file type (CAD files)
+  if (
+    (block as { type: unknown }).type === "file" &&
+    "source_type" in block &&
+    (block as { source_type: unknown }).source_type === "s3" &&
+    "s3_key" in block &&
+    "s3_bucket" in block &&
+    "s3_region" in block
+  ) {
+    return true;
+  }
+  
+  // Base64 file type (legacy + PDFs)
   if (
     (block as { type: unknown }).type === "file" &&
     "source_type" in block &&
@@ -154,5 +184,12 @@ export function isBase64ContentBlock(
   }
   
   return false;
+}
+
+// Backward compatibility - keep the old function name
+export function isBase64ContentBlock(
+  block: unknown,
+): block is Base64ContentBlock {
+  return isContentBlock(block) && (block as any).source_type === "base64";
 }
 

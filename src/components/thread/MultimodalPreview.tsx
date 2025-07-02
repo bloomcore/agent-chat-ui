@@ -1,11 +1,12 @@
 import React from "react";
-import { File, Image as ImageIcon, X as XIcon } from "lucide-react";
-import type { Base64ContentBlock } from "@langchain/core/messages";
+import { File, X as XIcon, Cloud } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
+import { ContentBlock } from "@/lib/multimodal-utils";
+import { formatFileSize } from "@/lib/s3-upload";
 
 export interface MultimodalPreviewProps {
-  block: Base64ContentBlock;
+  block: ContentBlock;
   removable?: boolean;
   onRemove?: () => void;
   className?: string;
@@ -102,11 +103,63 @@ export const MultimodalPreview: React.FC<MultimodalPreviewProps> = ({
     );
   }
 
-  // CAD files (DWG/DXF) block
+  // S3 CAD files (DWG/DXF) block
+  if (
+    block.type === "file" &&
+    block.source_type === "s3" &&
+    block.metadata?.original_name &&
+    isCADFile(block.metadata.original_name)
+  ) {
+    const originalName = block.metadata.original_name;
+    const fileExtension = originalName.toLowerCase().split('.').pop()?.toUpperCase();
+    const fileSize = formatFileSize(block.metadata.size);
+    
+    return (
+      <div
+        className={cn(
+          "relative flex items-start gap-2 rounded-md border bg-green-50 px-3 py-2",
+          className,
+        )}
+      >
+        <div className="flex flex-shrink-0 flex-col items-start justify-start">
+          <Cloud
+            className={cn(
+              "text-green-700",
+              size === "sm" ? "h-5 w-5" : "h-7 w-7",
+            )}
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <span
+            className={cn("text-sm break-all text-gray-800")}
+            style={{ wordBreak: "break-all", whiteSpace: "pre-wrap" }}
+          >
+            {String(originalName)}
+          </span>
+          <div className="text-xs text-green-600 mt-1">
+            {fileExtension} CAD File • {fileSize} • Cloud Storage
+          </div>
+        </div>
+        {removable && (
+          <button
+            type="button"
+            className="ml-2 self-start rounded-full bg-green-200 p-1 text-green-700 hover:bg-green-300"
+            onClick={onRemove}
+            aria-label="Remove CAD file"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // CAD files (DWG/DXF) block - Legacy base64 support
   if (
     block.type === "file" &&
     block.source_type === "base64" &&
     block.metadata?.filename &&
+    typeof block.metadata.filename === "string" &&
     isCADFile(block.metadata.filename)
   ) {
     const filename = block.metadata.filename;

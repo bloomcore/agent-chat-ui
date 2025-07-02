@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, ChangeEvent } from "react";
 import { toast } from "sonner";
-import type { Base64ContentBlock } from "@langchain/core/messages";
-import { fileToContentBlock } from "@/lib/multimodal-utils";
+import { fileToContentBlock, ContentBlock } from "@/lib/multimodal-utils";
 
 // Updated MIME types for CAD files - includes common detection types
 export const SUPPORTED_FILE_TYPES = [
@@ -25,14 +24,14 @@ export const SUPPORTED_FILE_TYPES = [
 ];
 
 interface UseFileUploadOptions {
-  initialBlocks?: Base64ContentBlock[];
+  initialBlocks?: ContentBlock[];
 }
 
 export function useFileUpload({
   initialBlocks = [],
 }: UseFileUploadOptions = {}) {
   const [contentBlocks, setContentBlocks] =
-    useState<Base64ContentBlock[]>(initialBlocks);
+    useState<ContentBlock[]>(initialBlocks);
   const dropRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const dragCounter = useRef(0);
@@ -77,13 +76,14 @@ export function useFileUpload({
     return false;
   };
 
-  const isDuplicate = (file: File, blocks: Base64ContentBlock[]) => {
+  const isDuplicate = (file: File, blocks: ContentBlock[]) => {
     if (file.type === "application/pdf") {
       return blocks.some(
         (b) =>
           b.type === "file" &&
-          b.mime_type === "application/pdf" &&
-          b.metadata?.filename === file.name,
+          b.source_type === "base64" &&
+          (b as any).mime_type === "application/pdf" &&
+          (b.metadata?.filename === file.name),
       );
     }
     
@@ -92,7 +92,8 @@ export function useFileUpload({
       return blocks.some(
         (b) =>
           b.type === "file" &&
-          b.metadata?.filename === file.name
+          ((b.source_type === "base64" && b.metadata?.filename === file.name) ||
+           (b.source_type === "s3" && (b as any).metadata?.original_name === file.name))
       );
     }
     
@@ -100,8 +101,9 @@ export function useFileUpload({
     if (isValidFile(file)) {
       return blocks.some(
         (b) =>
-          ((b.type === "image" && b.metadata?.name === file.name) ||
-           (b.type === "file" && b.metadata?.filename === file.name))
+          ((b.type === "image" && b.source_type === "base64" && b.metadata?.name === file.name) ||
+           (b.type === "file" && b.source_type === "base64" && b.metadata?.filename === file.name) ||
+           (b.type === "file" && b.source_type === "s3" && (b as any).metadata?.original_name === file.name))
       );
     }
     return false;
@@ -309,15 +311,28 @@ export function useFileUpload({
         return contentBlocks.some(
           (b) =>
             b.type === "file" &&
-            b.mime_type === "application/pdf" &&
+            b.source_type === "base64" &&
+            (b as any).mime_type === "application/pdf" &&
             b.metadata?.filename === file.name,
         );
       }
+      
+      // For CAD files, check by filename since MIME types vary
+      if (isCADFile(file)) {
+        return contentBlocks.some(
+          (b) =>
+            b.type === "file" &&
+            ((b.source_type === "base64" && b.metadata?.filename === file.name) ||
+             (b.source_type === "s3" && (b as any).metadata?.original_name === file.name))
+        );
+      }
+      
       if (isValidFile(file)) {
         return contentBlocks.some(
           (b) =>
-            ((b.type === "image" && b.metadata?.name === file.name) ||
-             (b.type === "file" && b.metadata?.filename === file.name))
+            ((b.type === "image" && b.source_type === "base64" && b.metadata?.name === file.name) ||
+             (b.type === "file" && b.source_type === "base64" && b.metadata?.filename === file.name) ||
+             (b.type === "file" && b.source_type === "s3" && (b as any).metadata?.original_name === file.name))
         );
       }
       return false;
