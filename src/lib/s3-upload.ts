@@ -42,11 +42,11 @@ export async function uploadFileToS3(file: File): Promise<S3UploadResult> {
 }
 
 /**
- * Check if a file should be uploaded to S3 (currently only .dwg files)
+ * Check if a file should be uploaded to S3 (CAD files and Python files)
  */
 export function shouldUploadToS3(file: File): boolean {
   const fileName = file.name.toLowerCase();
-  return fileName.endsWith('.dwg') || fileName.endsWith('.dxf');
+  return fileName.endsWith('.dwg') || fileName.endsWith('.dxf') || fileName.endsWith('.py');
 }
 
 /**

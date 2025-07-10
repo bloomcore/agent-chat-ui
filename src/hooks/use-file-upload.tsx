@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, ChangeEvent } from "react";
 import { toast } from "sonner";
 import { fileToContentBlock, ContentBlock } from "@/lib/multimodal-utils";
 
-// Updated MIME types for CAD files - includes common detection types
+// Updated MIME types for CAD files and Python files - includes common detection types
 export const SUPPORTED_FILE_TYPES = [
   "image/jpeg",
   "image/png",
@@ -21,6 +21,9 @@ export const SUPPORTED_FILE_TYPES = [
   "application/dxf",
   "image/vnd.dxf",
   "text/plain", // DXF files are sometimes detected as plain text
+  // Python file MIME types
+  "text/x-python",
+  "application/x-python-code",
 ];
 
 interface UseFileUploadOptions {
@@ -43,7 +46,14 @@ export function useFileUpload({
     return extension === 'dwg' || extension === 'dxf';
   };
 
-  // Enhanced file validation - prioritizes extension for CAD files
+  // Enhanced function to check if a file is a Python file based on extension
+  const isPythonFile = (file: File): boolean => {
+    const fileName = file.name.toLowerCase();
+    const extension = fileName.split('.').pop();
+    return extension === 'py';
+  };
+
+  // Enhanced file validation - prioritizes extension for CAD and Python files
   const isValidFile = (file: File): boolean => {
     console.log('Validating file:', {
       name: file.name,
@@ -54,6 +64,12 @@ export function useFileUpload({
     // First check if it's a CAD file by extension (most reliable)
     if (isCADFile(file)) {
       console.log(' Valid CAD file detected by extension');
+      return true;
+    }
+
+    // Check if it's a Python file by extension
+    if (isPythonFile(file)) {
+      console.log(' Valid Python file detected by extension');
       return true;
     }
 
@@ -68,6 +84,15 @@ export function useFileUpload({
       const extension = file.name.split('.').pop()?.toLowerCase();
       if (extension === 'dwg' || extension === 'dxf') {
         console.log(' Valid CAD file detected as octet-stream');
+        return true;
+      }
+    }
+
+    // Special case: text/plain might be a Python file
+    if (file.type === "text/plain") {
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (extension === 'py') {
+        console.log(' Valid Python file detected as text/plain');
         return true;
       }
     }
@@ -141,7 +166,7 @@ export function useFileUpload({
       })));
       
       toast.error(
-        `Invalid file type(s): ${invalidFiles.map(f => f.name).join(', ')}. Please upload JPEG, PNG, GIF, WEBP images, PDF, DWG or DXF files.`,
+        `Invalid file type(s): ${invalidFiles.map(f => f.name).join(', ')}. Please upload JPEG, PNG, GIF, WEBP images, PDF, DWG, DXF, or Python files.`,
       );
     }
     if (duplicateFiles.length > 0) {
@@ -206,7 +231,7 @@ export function useFileUpload({
 
       if (invalidFiles.length > 0) {
         toast.error(
-          `Invalid file type(s): ${invalidFiles.map(f => f.name).join(', ')}. Please upload JPEG, PNG, GIF, WEBP images, PDF, DWG or DXF files.`,
+          `Invalid file type(s): ${invalidFiles.map(f => f.name).join(', ')}. Please upload JPEG, PNG, GIF, WEBP images, PDF, DWG, DXF, or Python files.`,
         );
       }
       if (duplicateFiles.length > 0) {
@@ -343,7 +368,7 @@ export function useFileUpload({
     
     if (invalidFiles.length > 0) {
       toast.error(
-        `Invalid pasted file type(s): ${invalidFiles.map(f => f.name).join(', ')}. Please paste JPEG, PNG, GIF, WEBP images, PDF, DWG or DXF files.`,
+        `Invalid pasted file type(s): ${invalidFiles.map(f => f.name).join(', ')}. Please paste JPEG, PNG, GIF, WEBP images, PDF, DWG, DXF, or Python files.`,
       );
     }
     if (duplicateFiles.length > 0) {

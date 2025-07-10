@@ -510,7 +510,7 @@ export function Thread() {
                           type="file"
                           onChange={handleFileUpload}
                           multiple
-                          accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.dwg,.dxf,application/octet-stream"
+                          accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.dwg,.dxf,.py,application/octet-stream,text/x-python"
                           className="hidden"
                         />
                         {stream.isLoading ? (

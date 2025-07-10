@@ -26,6 +26,12 @@ export const MultimodalPreview: React.FC<MultimodalPreviewProps> = ({
     return extension === 'dwg' || extension === 'dxf';
   };
 
+  // Helper function to check if a file is a Python file
+  const isPythonFile = (filename: string): boolean => {
+    const extension = filename.toLowerCase().split('.').pop();
+    return extension === 'py';
+  };
+
   // Image block
   if (
     block.type === "image" &&

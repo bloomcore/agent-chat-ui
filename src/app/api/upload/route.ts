@@ -24,8 +24,8 @@ export async function POST(request: NextRequest) {
 
     // Validate file type
     const fileName = file.name.toLowerCase();
-    if (!fileName.endsWith('.dwg') && !fileName.endsWith('.dxf')) {
-      return NextResponse.json({ error: 'Only .dwg and .dxf files are supported' }, { status: 400 });
+    if (!fileName.endsWith('.dwg') && !fileName.endsWith('.dxf') && !fileName.endsWith('.py')) {
+      return NextResponse.json({ error: 'Only .dwg, .dxf, and .py files are supported' }, { status: 400 });
     }
 
     // Generate unique key for the file
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     const month = String(new Date().getMonth() + 1).padStart(2, '0');
     
     // Create organized S3 key structure
-    const s3Key = `user-uploads/drawings/${year}/${month}/${uniqueId}.${fileExtension}`;
+    const s3Key = `user-uploads/${year}/${month}/${uniqueId}.${fileExtension}`;
 
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer();

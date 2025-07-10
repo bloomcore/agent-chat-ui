@@ -42,12 +42,18 @@ export async function fileToContentBlock(
     "application/x-dwg",
     "image/x-autocad"
   ];
+
+  const supportedPythonTypes = [
+    "text/x-python",
+    "application/x-python-code",
+  ];
   
   const supportedFileTypes = [
     ...supportedImageTypes, 
     "application/pdf",
     ...supportedCADTypes,
-    "text/plain", // DXF files are sometimes detected as plain text
+    ...supportedPythonTypes,
+    "text/plain", // DXF files and Python files are sometimes detected as plain text
   ];
 
   // Helper function to check if a file is a CAD file based on extension
@@ -56,12 +62,18 @@ export async function fileToContentBlock(
     return fileName.endsWith('.dwg') || fileName.endsWith('.dxf');
   };
 
-  // Check if file is supported by MIME type or file extension (for CAD files)
-  const isSupported = supportedFileTypes.includes(file.type) || isCADFile(file);
+  // Helper function to check if a file is a Python file based on extension
+  const isPythonFile = (file: File): boolean => {
+    const fileName = file.name.toLowerCase();
+    return fileName.endsWith('.py');
+  };
+
+  // Check if file is supported by MIME type or file extension (for CAD and Python files)
+  const isSupported = supportedFileTypes.includes(file.type) || isCADFile(file) || isPythonFile(file);
 
   if (!isSupported) {
     toast.error(
-      `Unsupported file type: ${file.type}. Supported types are: images (JPEG, PNG, GIF, WEBP), PDF, DWG, and DXF files.`,
+      `Unsupported file type: ${file.type}. Supported types are: images (JPEG, PNG, GIF, WEBP), PDF, DWG, DXF, and Python files.`,
     );
     return Promise.reject(new Error(`Unsupported file type: ${file.type}`));
   }
@@ -90,8 +102,8 @@ export async function fileToContentBlock(
     };
   }
 
-  // Handle CAD files (DWG and DXF) - Upload to S3 instead of base64
-  if (supportedCADTypes.includes(file.type) || isCADFile(file)) {
+  // Handle CAD files (DWG and DXF) and Python files - Upload to S3 instead of base64
+  if (supportedCADTypes.includes(file.type) || isCADFile(file) || supportedPythonTypes.includes(file.type) || isPythonFile(file)) {
     try {
       toast.info(`Uploading ${file.name} to cloud storage...`);
       const s3Result = await uploadFileToS3(file);
@@ -167,7 +179,9 @@ export function isContentBlock(
       mimeType === "application/dxf" ||
       mimeType === "image/vnd.dwg" ||
       mimeType === "image/vnd.dxf" ||
-      mimeType === "image/x-dwg"
+      mimeType === "image/x-dwg" ||
+      mimeType === "text/x-python" ||
+      mimeType === "application/x-python-code"
     );
   }
   
