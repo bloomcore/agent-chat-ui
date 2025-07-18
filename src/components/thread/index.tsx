@@ -46,6 +46,7 @@ import {
   ArtifactTitle,
   useArtifactContext,
 } from "./artifact";
+import { Writer } from "../Writer";
 
 function StickyToBottomContent(props: {
   content: ReactNode;
@@ -427,6 +428,11 @@ export function Thread() {
                   {isLoading && !firstTokenReceived && (
                     <AssistantMessageLoading />
                   )}
+
+                  {/* Demo Writer Component */}
+                  <div className="max-w-3xl mx-auto w-full">
+                    <Writer />
+                  </div>
                 </>
               }
               footer={
